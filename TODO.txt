@@ -1,0 +1,5 @@
+TODO:
+
+- Step through the code to understand how exactly it works
+- Modify code to allow for sagging effects
+- Consider how to add correcting coils
