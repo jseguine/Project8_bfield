@@ -30,14 +30,14 @@ from numpy.typing import NDArray
 
 # Converts inputs into standardized form. Throws errors if unusable explaining the issue.
 def bfield_inputs(coil: NDArray | list, grid: NDArray, currents: NDArray | None = None) -> dict:
-	""" Ensures that the parameters passed to the magnetic field calculating function are in the appropriate form.
+	""" Ensures that the parameters passed to the magnetic field calculating function are in the appropriate form. Raises an error if something is off with how the parameters are passed. Returns a dictionary of each of these parameters in a proper form for use in calculating the bfield.
 
 	Parameters
 	----------
 	coil: NDArray, list
-		As an NDArray, should have size (m, 3) or (n, m, 3) where n is the number of coils, m is the number of points defining the coils, and 3 are the positions of each coil point.
+		Multiple coils could be passed as an array if they have the same number of points or as a list of arrays of 3-d points. Can also pass currents in if coil is a list.
 
-		If coil is a list, currents must be None. The list should be 2 NDArrays, first describing the coils and second the currents.
+		
 
 	grid: NDArray
 		Must have size (3) or (n, 3), where n is the number of gridpoints to compute the field at. 
@@ -52,7 +52,7 @@ def bfield_inputs(coil: NDArray | list, grid: NDArray, currents: NDArray | None 
 	Returns
 	-------
 		dict: 
-			- "coil" is an array of discretized coils
+			- "coil" is a list of arrays of discretized coils
 			- "grid" is an array of points to measure the magnetic field
 			- "current" is an array of currents corresponding to each coil	
 	"""
@@ -74,13 +74,43 @@ def bfield_inputs(coil: NDArray | list, grid: NDArray, currents: NDArray | None 
 
 	# Ensure that coil is usable for this code
 	# If coil is a list containing both coil positions and currents, split into separate arrays
-	if (type(coil) == list):
-		if currents is not None:
-			raise TypeError("Can't pass in coil as list and currents")
-		if len(coil) != 2:
-			raise ValueError("coil as a list should only have an array with all coils and an array of currents.")
-		currents = np.copy(coil[1])
-		coil = np.copy(coil[0])
+	if (type(coil) == list): # and (type(coil[0]) != list):
+		if type(coil[0]) == list: # Coil = [[coil1, coil2, ...], currents]
+			if (type(coil[-1]) != NDArray) and (type(coil[-1]) != np.ndarray):
+				raise TypeError("coil passed improperly")
+			elif currents is not None:
+				raise TypeError("Can't pass current values in both coil and currents")
+			elif np.ndim(coil[-1]) != 1:
+				raise ValueError("Improper dimensions for currents")
+			elif len(coil[0]) != len(coil[-1]):
+				raise ValueError("Current dimensions must match number of coils")
+			currents = np.copy(coil[-1])
+			coil = np.array(coil[0])
+			
+		elif  (type(coil[0]) != NDArray) and (type(coil[0]) != np.ndarray):
+			raise TypeError("coil passed improperly")
+		
+		elif np.ndim(coil[0]) == 3: # Coil = [{coil1, coil2, ...}, currents]
+			if currents is not None:
+				raise TypeError("Can't pass current values in both coil and currents")
+			currents = np.copy(coil[-1])
+			coil = np.copy(coil[0])
+
+		elif np.ndim(coil[-1]) == 1: # Coil = [coil, current]
+			if currents is not None:
+				raise TypeError("Can't pass current values in both coil and currents")
+			currents = np.copy(coil[-1])
+			coil = np.copy(coil[0])
+		
+		else: # Coil = [coil1, coil2, ...]
+			for coil_i in coil:
+				if np.ndim(coil_i) != 2:
+					raise ValueError("coil dimensions are incorrect")
+			coil = np.array(coil)
+		# By this point, current is None if not passed anywhere or an array of currents if passed.
+		# Coil is an array (either 2-d or 3-d depending on if multiple coils)
+
+
 	# Consider possibilities for passing in array for coil. Sets coil_pos as an array with arrays corresponding to coil positions as well as how many coils there are.
 	if (type(coil) == NDArray) or (type(coil) == np.ndarray):
 		coil_dims = np.ndim(coil) # 2 = single coil, 3 = multiple coils
@@ -95,6 +125,8 @@ def bfield_inputs(coil: NDArray | list, grid: NDArray, currents: NDArray | None 
 				raise ValueError("Single coil should be 3-vectors")
 			coil_pos = np.copy(coil)
 		num_coils = len(coil_pos)
+		list_coils = [coil_points for coil_points in coil_pos]
+
 	else: 
 		raise TypeError("coil must either be a list or array.")
 	
@@ -108,7 +140,7 @@ def bfield_inputs(coil: NDArray | list, grid: NDArray, currents: NDArray | None 
 		currents = np.ones(num_coils)
 
 	outputs = {
-		"coil": coil_pos,
+		"coil": list_coils,
 		"grid": grid,
 		"current": currents
 	}
@@ -119,15 +151,30 @@ def bfield_inputs(coil: NDArray | list, grid: NDArray, currents: NDArray | None 
 
 
 
-def bfield(coil: NDArray, grid: NDArray, currents: NDArray) -> NDArray:
-	"""
-	Units: coil in m, grid in m, currents in A
+def bfield(coil: list, grid: NDArray, currents: NDArray) -> NDArray:
+	""" Ensures that the parameters passed to the magnetic field calculating function are in the appropriate form.
+
+	Parameters
+	----------
+	coil: list
+		A list of n coils, where each coil is an array of size (m, 3) with m points specifying coil positions.
+
+	grid: NDArray
+		An array of size (n, 3) to measure the magnetic field at each of the n points. 
+
+	currents: NDArray, None
+		An NDArray of n currents, corresponding to each of the n coils in order.
+
+	Returns
+	-------
+		NDArray: 
+			An array of size (n, 3) of the 3-d magnetic field at each of the points in grid, in order.
 	"""
 	μ0 = 1.25663706127e-6 # N/A^2
 	field = np.zeros_like(grid)			# empty output array of right size
 	
 	num_coils = len(coil)
-	# print(num_coils)
+
 	for i in range(len(coil)):
 		vRf = grid - coil[i][0] # Vectors from coil point initial to measurement points
 		sRf = np.linalg.norm(vRf, axis = 1) # Magnitudes of vectors
@@ -166,16 +213,17 @@ def main():
 	coil1 = np.array([[0, 1, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]])
 	coil2 = -1*np.copy(coil1)
 	coil3 = 2*np.copy(coil1)
-	# Present limitation, when using multiple coils all must have the same number of points... to fix
+
 	
-	coil = np.array([coil1, coil2, coil3])
+	coil = [coil1, coil2, coil3]
 	currents = np.array([1, 1, 2])
 	coil_list = [coil, currents]
 
 
 
 	grid = np.array([[1, 1, 1], [1, 0, 1]])
-	bfield_params = bfield_inputs(coil, grid, currents=np.array([np.sqrt(2), 2, 3]))
+	bfield_params = bfield_inputs(coil, grid,  currents=np.array([np.sqrt(2), 2, 3]))
+	print(bfield_params)
 	field = bfield(bfield_params["coil"], bfield_params["grid"], bfield_params["current"])
 	print(field)
 	return
