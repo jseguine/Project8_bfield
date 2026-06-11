@@ -152,7 +152,7 @@ def bfield_inputs(coil: NDArray | list, grid: NDArray, currents: NDArray | None 
 
 
 def bfield(coil: list, grid: NDArray, currents: NDArray) -> NDArray:
-	""" Ensures that the parameters passed to the magnetic field calculating function are in the appropriate form.
+	""" Computes the magnetic field at each grid point from all coils using a discretized Biot-Savart law.
 
 	Parameters
 	----------
