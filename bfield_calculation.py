@@ -66,7 +66,7 @@ def bfield_inputs(coil: NDArray | list, grid: NDArray, currents: NDArray | None 
 	elif grid_dims == 1:
 		if len(grid) != 3:
 			raise ValueError("grid should be 3-vectors")
-		grid_dims = np.array([np.copy(grid)])
+		grid = np.array([np.copy(grid)])
 	else:
 		if len(grid[0]) != 3:
 			raise ValueError("grid should be 3-vectors")
@@ -221,7 +221,7 @@ def main():
 
 
 
-	grid = np.array([[1, 1, 1], [1, 0, 1]])
+	grid = np.array([1, 1, 1])
 	bfield_params = bfield_inputs(coil, grid,  currents=np.array([np.sqrt(2), 2, 3]))
 	print(bfield_params)
 	field = bfield(bfield_params["coil"], bfield_params["grid"], bfield_params["current"])
