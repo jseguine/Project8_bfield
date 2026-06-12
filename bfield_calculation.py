@@ -209,6 +209,82 @@ def bfield(coil: list, grid: NDArray, currents: NDArray) -> NDArray:
 	# 	field = field + sfield;
 	return field
 
+
+def build_M_bfield(coil: list, grid: NDArray, currents: NDArray) -> NDArray:
+	""" Computes the magnetic field at each grid point from all coils using a discretized Biot-Savart law.
+
+	Parameters
+	----------
+	coil: list
+		A list of n coils, where each coil is an array of size (m, 3) with m points specifying coil positions.
+
+	grid: NDArray
+		An array of size (n, 3) to measure the magnetic field at each of the n points. 
+
+	currents: NDArray, None
+		An NDArray of n currents, corresponding to each of the n coils in order.
+
+	Returns
+	-------
+		dict: 
+			{"Bx": NDArray, "By": NDArray, "Bz": NDArray}
+			
+	"""
+	μ0 = 1.25663706127e-6 # N/A^2
+	num_coils = len(coil)
+	num_points = len(grid)
+
+	field_x = np.zeros((num_points, num_coils))		# empty output array of right size
+	field_y = np.copy(field_x)
+	field_z = np.copy(field_x)
+	
+	
+
+	for i in range(len(coil)):
+		coil_field = np.zeros_like(grid)
+		vRf = grid - coil[i][0] # Vectors from coil point initial to measurement points
+		sRf = np.linalg.norm(vRf, axis = 1) # Magnitudes of vectors
+
+		for k in range(1, len(coil[i])): # For each pairing of points in a particular loop
+
+			vRi = np.copy(vRf)
+			sRi = np.copy(sRf)
+			vRf = grid - coil[i][k] 
+			sRf = np.linalg.norm(vRf, axis = 1)
+			sRiRf = np.multiply(sRi, sRf)
+			
+			vRidotvRf = np.sum(np.multiply(vRi, vRf), axis = 1)
+			const = (μ0/(4*np.pi))*currents[i]*(sRi + sRf)/(sRiRf*(sRiRf + vRidotvRf))
+			# const = (μ0/4π)*I*(|Ri| + |Rf|)/(|Ri||Rf|(|Ri||Rf| + vRi x vRf))
+			temp_field = np.cross(vRi, vRf)*const[:, None]
+			coil_field += temp_field
+
+		for j in range(len(grid)):
+			field_x[j, i] = coil_field[j, 0]
+			field_y[j, i] = coil_field[j, 1]
+			field_z[j, i] = coil_field[j, 2]
+
+	
+			
+			
+			
+			
+
+
+
+	# for k = 2:size(coil{1,sc},2):	# calculate vector of fields in loop over coil segments
+	# 	vRi = vRf; sRi=sRf;		# previous final point = new initial point
+	# 	vRf = grid - coil{1,sc}(:,k); # calculate new relative vectors
+	# 	sRf = sqrt(sum(vRf.*vRf));	# vecnorm(vRf);
+	# 	tmp = sRi.*sRf;
+	# 	sfield = sfield + cross(vRi,vRf).*(sRi+sRf)./tmp./(tmp + dot(vRi,vRf));		 # Biot-Savart law, see Eq. 9, http://bit.ly/2DsXUTK
+	# if size(coil,1)>1 sfield=sfield*coil{2,sc}; end;   #current in second row
+	# 	field = field + sfield;
+	field = {"Bx": field_x, "By": field_y, "Bz": field_z}
+	return field
+
+
+
 def main():
 	coil1 = np.array([[0, 1, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]])
 	coil2 = -1*np.copy(coil1)
